@@ -1,0 +1,10 @@
+pyTelegramBotAPI==4.26.0
+groq
+supabase
+flask
+requests
+cachetools
+gtts
+pydub
+SpeechRecognition
+pytz
