@@ -228,6 +228,7 @@ user_memory_cache = TTLCache(maxsize=1500, ttl=5400)
 registered_users_cache = TTLCache(maxsize=5000, ttl=86400)
 
 last_message_time = {}
+user_name_mention_time = {}
 user_recent_replies = {}
 ACTIVE_GAME_SESSIONS = {}
 TTS_USERS = set()
@@ -613,7 +614,10 @@ Return STRICT JSON only with exactly two top-level keys:
   "reply": "..."
 }}
 
-Reply must be 1-3 natural sentences in Hinglish.
+Reply must be SHORT: usually 1 sentence, maximum 2 short sentences in Hinglish.
+- Do not over-explain.
+- Simple questions should get a short answer.
+- Do not use the user name in every reply; use it only sometimes.
 
 USER PROFILE:
 Name: {profile.get("name")}
@@ -665,7 +669,7 @@ ONGOING SUMMARY:
                 "model": AI_MODEL,
                 "messages": messages,
                 "temperature": 0.75 + (attempt * 0.05),
-                "max_tokens": 300,
+                "max_tokens": 140,
             }
 
             response = requests.post(
@@ -743,27 +747,36 @@ ONGOING SUMMARY:
 # KEYBOARD
 # ============================================================
 def get_main_keyboard():
-    markup = types.ReplyKeyboardMarkup(
-        resize_keyboard=True,
-        row_width=2,
-    )
-
-    markup.add(
-        types.KeyboardButton("💬 Talk To Venu"),
-        types.KeyboardButton("🧠 My Memory"),
-        types.KeyboardButton("👤 My Profile"),
-        types.KeyboardButton("😂 Joke"),
-        types.KeyboardButton("❤️ Shayari"),
-        types.KeyboardButton("🎲 Fun Zone"),
-        types.KeyboardButton("🔥 Roast Battle"),
-        types.KeyboardButton("📊 My Stats"),
-        types.KeyboardButton("🎙️ Voice Mode"),
-        types.KeyboardButton("➕ Add Me In Group"),
-        types.KeyboardButton("ℹ️ Help"),
-        types.KeyboardButton("🧹 Clear Chat"),
-    )
-
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(types.InlineKeyboardButton("💬 Talk", callback_data="home_talk"), types.InlineKeyboardButton("🎮 Games", callback_data="games_menu"))
+    markup.add(types.InlineKeyboardButton("🧠 Memory", callback_data="home_memory"), types.InlineKeyboardButton("👤 Profile", callback_data="home_profile"))
+    markup.add(types.InlineKeyboardButton("😂 Fun", callback_data="home_fun"), types.InlineKeyboardButton("📊 Stats", callback_data="home_stats"))
+    markup.add(types.InlineKeyboardButton("🎙️ Voice", callback_data="home_voice"), types.InlineKeyboardButton("ℹ️ Help", callback_data="home_help"))
+    markup.add(types.InlineKeyboardButton("➕ Add To Group", callback_data="home_group"), types.InlineKeyboardButton("🧹 Clear", callback_data="home_clear"))
     return markup
+
+
+def get_games_keyboard():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(types.InlineKeyboardButton("🎯 Guess Number", callback_data="game_guess"), types.InlineKeyboardButton("🎲 Truth or Dare", callback_data="game_tod"))
+    markup.add(types.InlineKeyboardButton("🧩 Riddle Battle", callback_data="game_riddle"), types.InlineKeyboardButton("🔥 Roast Battle", callback_data="game_roast"))
+    markup.add(types.InlineKeyboardButton("⬅️ Back", callback_data="home_menu"))
+    return markup
+
+
+def short_name_prefix(user_id, first_name, probability=0.14):
+    name = (first_name or "").strip()
+    if not name or len(name) > 30:
+        return ""
+    now = time.time()
+    with state_lock:
+        last = user_name_mention_time.get(user_id, 0.0)
+    if now - last < 600 or random.random() > probability:
+        return ""
+    with state_lock:
+        user_name_mention_time[user_id] = now
+    return f"{name}, "
+
 # ============================================================
 # GROUP FILTER
 # ============================================================
@@ -958,7 +971,6 @@ def send_profile(message):
         bot.reply_to(
             message,
             text,
-            reply_markup=get_main_keyboard(),
         )
 
     except Exception:
@@ -1135,7 +1147,7 @@ def cmd_start(message):
         bot.reply_to(
             message,
             f"Oye {user.first_name or 'Dost'}! ✨\n"
-            "Main Venu hoon. Bata aaj kya scene hai? 😎🔥",
+            "Main Venu hoon. Bata kya scene hai? 😎",
             reply_markup=get_main_keyboard(),
         )
 
@@ -1157,7 +1169,6 @@ def cmd_clear(message):
             message,
             "🧹 Purani chat memory clear kar di. "
             "Naye sire se shuru karte hain 😌✨",
-            reply_markup=get_main_keyboard(),
         )
 
     except Exception:
@@ -1343,7 +1354,7 @@ def handle_game_manager(message, game_type):
     else:
         return
 
-    bot.reply_to(message, text, reply_markup=get_main_keyboard())
+    bot.reply_to(message, text, reply_markup=get_games_keyboard())
 
 def process_active_game(message, user_id, text):
     with state_lock:
@@ -1423,6 +1434,37 @@ def process_active_game(message, user_id, text):
     with state_lock:
         ACTIVE_GAME_SESSIONS.pop(user_id, None)
     return False
+
+
+# ============================================================
+# INLINE MENU CALLBACKS
+# ============================================================
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_menu_callback(call):
+    try:
+        data = call.data or ""
+        chat_id = call.message.chat.id if call.message else call.from_user.id
+        bot.answer_callback_query(call.id)
+        if data == "home_menu":
+            bot.edit_message_text("😎 Venu — kya karna hai?", chat_id, call.message.message_id, reply_markup=get_main_keyboard())
+        elif data == "games_menu":
+            bot.edit_message_text("🎮 Game choose kar:", chat_id, call.message.message_id, reply_markup=get_games_keyboard())
+        elif data == "game_guess": handle_game_manager(call.message, "guess")
+        elif data == "game_tod": handle_game_manager(call.message, "truth_or_dare")
+        elif data == "game_riddle": handle_game_manager(call.message, "riddle")
+        elif data == "game_roast": handle_game_manager(call.message, "roast")
+        elif data == "home_talk": bot.send_message(chat_id, "Bol bhai 😎")
+        elif data == "home_memory": send_memory_summary(call.message)
+        elif data == "home_profile": send_profile(call.message)
+        elif data == "home_fun": send_fun_zone(call.message)
+        elif data == "home_stats": send_stats(call.message)
+        elif data == "home_voice": cmd_voice(call.message)
+        elif data == "home_help": send_help(call.message)
+        elif data == "home_group": send_add_me_in_group(call.message)
+        elif data == "home_clear": cmd_clear(call.message)
+    except Exception:
+        logger.exception("Inline menu callback error")
 
 
 # ============================================================
@@ -1554,8 +1596,7 @@ def handle_text_message(message):
             bot.reply_to(
                 message,
                 f"🧮 Result: {math_result}",
-                reply_markup=get_main_keyboard(),
-            )
+                )
 
             increment_daily_stats(
                 user_id,
@@ -1588,6 +1629,9 @@ def handle_text_message(message):
             memory_packet,
             text_content,
         )
+        prefix = short_name_prefix(user_id, message.from_user.first_name)
+        if prefix and not response.lower().startswith((message.from_user.first_name or "").lower() + ","):
+            response = prefix + response
 
         update_profile_field(
             user_id,
@@ -1612,7 +1656,6 @@ def handle_text_message(message):
         bot.reply_to(
             message,
             response,
-            reply_markup=get_main_keyboard(),
         )
 
         with state_lock:
@@ -1717,7 +1760,6 @@ def handle_voice_message(message):
             message,
             f"🎙️ Tu bola: {text_content}\n\n"
             f"{response}",
-            reply_markup=get_main_keyboard(),
         )
 
         with state_lock:
@@ -1851,6 +1893,7 @@ def main():
                 allowed_updates=[
                     "message",
                     "edited_message",
+                    "callback_query",
                 ],
             )
 
