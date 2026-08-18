@@ -64,8 +64,17 @@ AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
-ADMIN_ID = int(os.getenv("ADMIN_ID", ""))
-BOT_USERNAME = "testingaiclaudebot"
+def env_int(name, default=0):
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        logger = logging.getLogger(__name__)
+        logger.warning("Invalid integer in %s; using %s", name, default)
+        return default
+
+ADMIN_ID = env_int("ADMIN_ID", 0)
+BOT_USERNAME = ""
 AI_BASE_URL = os.getenv("AI_BASE_URL", "").strip().rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "").strip()
 
@@ -81,6 +90,10 @@ if not AI_API_KEY:
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise RuntimeError("SUPABASE_URL and SUPABASE_KEY environment variables are required.")
+if not AI_BASE_URL:
+    raise RuntimeError("AI_BASE_URL environment variable is missing.")
+if not AI_MODEL:
+    raise RuntimeError("AI_MODEL environment variable is missing.")
 
 
 # ============================================================
@@ -110,10 +123,9 @@ logger = logging.getLogger(__name__)
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode=None)
 
 try:
-    BOT_ID = bot.get_me().id
     BOT_INFO = bot.get_me()
-    if not BOT_USERNAME:
-        BOT_USERNAME = (BOT_INFO.username or "").lower()
+    BOT_ID = BOT_INFO.id
+    BOT_USERNAME = (BOT_INFO.username or "").lower()
 except Exception:
     logger.exception("Could not fetch Telegram bot information during startup")
     BOT_ID = None
@@ -380,7 +392,7 @@ def get_user_memory(user_id, first_name="Dost"):
 
 
 def update_profile_field(user_id, field, value):
-  allowed_fields = {
+    allowed_fields = {
     "name",
     "age",
     "favorite_game",
@@ -389,8 +401,8 @@ def update_profile_field(user_id, field, value):
     "relationship_status",
     "hobbies",
     "current_mood",
-    "emotional_momentum",
-}
+        "emotional_momentum",
+    }
 
     if field not in allowed_fields:
         return
@@ -568,11 +580,11 @@ def generate_unified_ai_response(
     summary = memory_packet["summary"]
     history = memory_packet["history"]
 
-with state_lock:
-    if user_id not in user_recent_replies:
-        user_recent_replies[user_id] = deque(maxlen=10)
+    with state_lock:
+        if user_id not in user_recent_replies:
+            user_recent_replies[user_id] = deque(maxlen=10)
 
-mood_desc = (
+    mood_desc = (
     "Witty, loyal, emotionally intelligent, supportive and chill"
 )
 
@@ -743,6 +755,7 @@ def get_main_keyboard():
         types.KeyboardButton("😂 Joke"),
         types.KeyboardButton("❤️ Shayari"),
         types.KeyboardButton("🎲 Fun Zone"),
+        types.KeyboardButton("🔥 Roast Battle"),
         types.KeyboardButton("📊 My Stats"),
         types.KeyboardButton("🎙️ Voice Mode"),
         types.KeyboardButton("➕ Add Me In Group"),
@@ -840,7 +853,7 @@ def send_help(message):
         message,
         "ℹ️ **Venu Features**\n\n"
         "💬 Natural Hinglish AI chat + long-term Supabase memory\n"
-        "🎮 Guess, Truth/Dare, Riddle\n"
+        "🎮 Guess, Truth/Dare, Riddle, Roast Battle\n"
         "😂 Joke / ❤️ Shayari / 🎲 Fun Zone\n"
         "🎙️ /voice + /novoice for voice replies\n"
         "📊 /stats for activity\n"
@@ -915,7 +928,7 @@ def send_add_me_in_group(message):
         message,
         "➕ **Add Venu In Group**\n\n"
         "Button dabao, group select karo aur Venu ko add kar do. 😎🔥\n\n"
-        "Group mein mujhe **@lunwtbwts_bot** mention karo ya meri message ko reply karo.",
+        "Group mein mujhe mention karo ya meri message ko reply karo.",
         reply_markup=markup,
     )
 
@@ -1236,6 +1249,11 @@ def cmd_fun(message):
     send_fun_zone(message)
 
 
+@bot.message_handler(commands=["roast"])
+def cmd_roast(message):
+    handle_game_manager(message, "roast")
+
+
 @bot.message_handler(commands=["choose"])
 def cmd_choose(message):
     raw = message.text.partition(" ")[2].strip()
@@ -1254,6 +1272,157 @@ def cmd_coin(message):
 @bot.message_handler(commands=["dice"])
 def cmd_dice(message):
     bot.reply_to(message, f"🎲 Dice: **{random.randint(1, 6)}**")
+
+
+
+# ============================================================
+# GAMES
+# ============================================================
+
+RIDDLES = [
+    ("Aisi kya cheez hai jo tootne par awaaz nahi karti?", "khamoshi"),
+    ("Jitna zyada nikaalo, utna hi bada hota jaata hai. Kya?", "gaddha"),
+    ("Mere paas keys hain par locks nahi, space hai par room nahi. Main kya hoon?", "keyboard"),
+    ("Subah chaar pair, dopahar do pair, shaam teen pair. Kya?", "insaan"),
+    ("Main geela karta hoon jab khud geela hota hoon. Kya?", "towel"),
+]
+
+TRUTH_QUESTIONS = [
+    "Aisi kaunsi embarrassing cheez hai jo tumne recently ki?",
+    "Tumhara sabse weird talent kya hai?",
+    "Kis cheez se tum instantly khush ho jaate ho?",
+    "Aakhri baar kis baat par jhooth bola tha?",
+    "Tumhari sabse funny childhood memory kya hai?",
+]
+
+DARES = [
+    "Apne last used emoji se ek funny sentence bana.",
+    "Kisi friend ko sirf 'mission successful 🫡' bhej.",
+    "10 seconds mein 5 fruits ke naam likh.",
+    "Apni life ko ek movie title de.",
+    "Agle message mein sirf emojis use kar.",
+]
+
+ROASTS = [
+    "Teri typing dekh ke autocorrect bhi resignation de de. 😂",
+    "Tera confidence 4K mein hai, logic 144p mein. 😭",
+    "Bhai tu itna unpredictable hai ki random number generator bhi insecure ho jaaye. 😂",
+    "Tera plan solid tha... bas plan mein plan hi nahi tha. 💀",
+]
+
+def _game_key(user_id):
+    return int(user_id)
+
+def handle_game_manager(message, game_type):
+    user_id = _game_key(message.from_user.id)
+    now = time.time()
+
+    with state_lock:
+        ACTIVE_GAME_SESSIONS[user_id] = {
+            "type": game_type,
+            "created": now,
+            "attempts": 0,
+        }
+
+    if game_type == "guess":
+        secret = random.randint(1, 50)
+        with state_lock:
+            ACTIVE_GAME_SESSIONS[user_id]["secret"] = secret
+            ACTIVE_GAME_SESSIONS[user_id]["attempts"] = 0
+        text = "🎮 Guess Number!\n1–50 ke beech number guess kar. Bas number bhej 😎"
+    elif game_type == "truth_or_dare":
+        text = "🎯 Truth or Dare?\n`truth` ya `dare` bhej."
+    elif game_type == "riddle":
+        question, answer = random.choice(RIDDLES)
+        with state_lock:
+            ACTIVE_GAME_SESSIONS[user_id]["question"] = question
+            ACTIVE_GAME_SESSIONS[user_id]["answer"] = answer
+        text = f"🧩 Riddle Battle!\n\n{question}\n\nAnswer bhej. `/clear` se game reset kar sakte ho."
+    elif game_type == "roast":
+        text = "🔥 Roast Battle!\n`roast` likh, ya koi line bhej — Venu halka-phulka roast karega. 😈"
+    else:
+        return
+
+    bot.reply_to(message, text, reply_markup=get_main_keyboard())
+
+def process_active_game(message, user_id, text):
+    with state_lock:
+        game = ACTIVE_GAME_SESSIONS.get(user_id)
+
+    if not game:
+        return False
+
+    game_type = game.get("type")
+    raw = text.strip()
+    lowered = raw.lower()
+
+    if lowered in {"/cancel", "cancel", "exit", "quit"}:
+        with state_lock:
+            ACTIVE_GAME_SESSIONS.pop(user_id, None)
+        bot.reply_to(message, "🎮 Game cancel. Jab mann ho phir start kar lena 😎")
+        return True
+
+    if game_type == "guess":
+        try:
+            guess = int(raw)
+        except ValueError:
+            bot.reply_to(message, "🔢 Bhai number bhej, jaise `27`.")
+            return True
+
+        if not 1 <= guess <= 50:
+            bot.reply_to(message, "1 se 50 ke beech bol 😭")
+            return True
+
+        with state_lock:
+            game["attempts"] = int(game.get("attempts", 0)) + 1
+            secret = int(game["secret"])
+            attempts = game["attempts"]
+
+        if guess == secret:
+            with state_lock:
+                ACTIVE_GAME_SESSIONS.pop(user_id, None)
+            bot.reply_to(message, f"🎉 Sahi pakde! Number {secret} tha.\nAttempts: {attempts}")
+        elif guess < secret:
+            bot.reply_to(message, "📈 Thoda bada number try kar.")
+        else:
+            bot.reply_to(message, "📉 Thoda chhota number try kar.")
+        return True
+
+    if game_type == "truth_or_dare":
+        if lowered == "truth":
+            answer = random.choice(TRUTH_QUESTIONS)
+            with state_lock:
+                ACTIVE_GAME_SESSIONS.pop(user_id, None)
+            bot.reply_to(message, f"🧠 Truth:\n{answer}")
+        elif lowered == "dare":
+            answer = random.choice(DARES)
+            with state_lock:
+                ACTIVE_GAME_SESSIONS.pop(user_id, None)
+            bot.reply_to(message, f"🔥 Dare:\n{answer}")
+        else:
+            bot.reply_to(message, "Sirf `truth` ya `dare` 😎")
+        return True
+
+    if game_type == "riddle":
+        answer = str(game.get("answer", "")).lower().strip()
+        normalized = re.sub(r"[^a-z0-9\u0900-\u097f ]", "", lowered).strip()
+        if normalized == answer or answer in normalized or SequenceMatcher(None, normalized, answer).ratio() >= 0.72:
+            with state_lock:
+                ACTIVE_GAME_SESSIONS.pop(user_id, None)
+            bot.reply_to(message, "🎉 Correct! Riddle master nikla tu. 🧠🔥")
+        else:
+            bot.reply_to(message, "❌ Nope 😭 Ek aur try maar.")
+        return True
+
+    if game_type == "roast":
+        with state_lock:
+            ACTIVE_GAME_SESSIONS.pop(user_id, None)
+        bot.reply_to(message, random.choice(ROASTS))
+        return True
+
+    with state_lock:
+        ACTIVE_GAME_SESSIONS.pop(user_id, None)
+    return False
 
 
 # ============================================================
@@ -1304,6 +1473,10 @@ def handle_text_message(message):
             handle_game_manager(message, "guess")
             return
 
+        if text_content == "🔥 Roast Battle":
+            handle_game_manager(message, "roast")
+            return
+
         if text_content == "🎯 Truth or Dare":
             handle_game_manager(message, "truth_or_dare")
             return
@@ -1332,6 +1505,18 @@ def handle_text_message(message):
 
         if text_content == "💬 Talk To Venu":
             bot.reply_to(message, "💬 Bol bhai, main sun raha hoon. Aaj ka scene kya hai? 😎", reply_markup=get_main_keyboard())
+            return
+
+        if text_content == "🧠 My Memory":
+            send_memory_summary(message)
+            return
+
+        if text_content == "👤 My Profile":
+            send_profile(message)
+            return
+
+        if text_content == "🎙️ Voice Mode":
+            cmd_voice(message)
             return
 
         if text_content == "ℹ️ Help":
@@ -1535,8 +1720,8 @@ def handle_voice_message(message):
             reply_markup=get_main_keyboard(),
         )
 
-    with state_lock:
-    should_tts = ENABLE_TTS and user_id in TTS_USERS
+        with state_lock:
+            should_tts = ENABLE_TTS and user_id in TTS_USERS
 
         if should_tts:
             threading.Thread(
