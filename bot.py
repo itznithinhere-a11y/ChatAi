@@ -59,15 +59,15 @@ from telebot import types
 # CONFIG
 # ============================================================
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7042790112:AAHkZ8x9-G8ALmVRy79WbCldTU_MiKdd17I").strip()
-AI_API_KEY = os.getenv("AI_API_KEY", "sk-5d02b9dcd5a2caf79a7e9d4d97b490915cec2b51fb2be11b1662a42768505df5").strip()
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://hhelxewgwuqcloofyeyw.supabase.co").strip().rstrip("/")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhoZWx4ZXdnd3VxY2xvb2Z5ZXl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NzIyNTUsImV4cCI6MjA5NTA0ODI1NX0.EL0wb1HKvT9lJLtMW7p-y0X3fwgC1LeFrts7ErHVD54").strip()
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
-ADMIN_ID = int(os.getenv("ADMIN_ID", "74228090810"))
+ADMIN_ID = int(os.getenv("ADMIN_ID", ""))
 BOT_USERNAME = "testingaiclaudebot"
-AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.mwapi.dev/v1").strip().rstrip("/")
-AI_MODEL = os.getenv("AI_MODEL", "claude-sonnet-4-6").strip()
+AI_BASE_URL = os.getenv("AI_BASE_URL", "").strip().rstrip("/")
+AI_MODEL = os.getenv("AI_MODEL", "").strip()
 
 PORT = int(os.getenv("PORT", "10000"))
 ENABLE_TTS = os.getenv("ENABLE_TTS", "true").lower() in {"1", "true", "yes", "on"}
