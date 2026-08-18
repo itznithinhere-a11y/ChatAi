@@ -596,7 +596,7 @@ Return STRICT JSON only with exactly two top-level keys:
 {{
   "classification": {{
     "mood": "...",
-    "intent": "chat|game|help|roast|calculator"
+    "intent": "chat|game|help|calculator"
   }},
   "reply": "..."
 }}
